@@ -3,5 +3,6 @@ Part1.md
 .venv/
 
 Personality_pred/data-final.csv
+*/.ipynb_checkpoints
 # DFL/
 # Forecasting/
