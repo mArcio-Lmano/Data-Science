@@ -29,14 +29,14 @@ app.post("/classifyImage", (req, res) => {
   // Step 4: Python script generates a text file
   python_process.stdout.on("data", (data) => {
     result += data.toString();
-    console.log("Python Result: ", result)
+    // console.log("Python Result: ", result)
   });
 
   python_process.on("close", () => {
     // Step 5: Send the python information to the server
     console.log("Python closed")
     // Clean up: Remove the generated files
-    // fs.unlinkSync(jsonFileName);
+    fs.unlinkSync(jsonFileName);
     // Step 6: Send the result back to the client
     res.send(result);
   });
