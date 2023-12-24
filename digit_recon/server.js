@@ -14,7 +14,7 @@ app.post("/classifyImage", (req, res) => {
   console.log("Received a request to classify an image.");
 
   const imageData = req.body;
-  console.log("Image Data: ", imageData);
+  // console.log("Image Data: ", imageData);
 
   // Step 2: Generate a JSON file with the provided data
   const jsonFileName = "input.json";
