@@ -1,9 +1,13 @@
+import pandas as pd
 import requests
 import sqlite3
 import json
+import sys
 
 from bs4 import BeautifulSoup
 from datetime import datetime
+from tabulate import tabulate
+
 
 
 class Actor:
@@ -19,9 +23,10 @@ class Movie:
                  year,
                  duration, 
                  genres,
-                 director = None, 
-                 language = None,
-                 actors = None) -> None:
+                 director, 
+                 language,
+                 actors = None,
+                 seen = None) -> None:
         
         self.name = name 
         self.link = link 
@@ -35,6 +40,7 @@ class Movie:
         self.language = language
         self.actors = actors
         self.add_to_db_date = datetime.now().date()
+        self.seen = seen
         
     
     def printMovie(self) -> None:
@@ -49,6 +55,7 @@ class Movie:
         Genres:   {self.genres}
         Director: {self.director}
         Language: {self.language}
+        Seen: {self.seen}
         """
         print(console_strig)
         return None
@@ -126,7 +133,8 @@ def create_movies_table(cursor):
                         director TEXT,
                         language TEXT,
                         actors TEXT,
-                        add_to_db_date DATE
+                        add_to_db_date DATE,
+                        seen DATE
                     )""")
 
 def insert_movie(cursor, movie):
@@ -143,24 +151,180 @@ def insert_movie(cursor, movie):
                         director,
                         language,
                         actors,
-                        add_to_db_date
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        add_to_db_date,
+                        seen
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (movie.name, movie.link, movie.rating_IMDB, movie.rating_MPPA,
                      movie.year, movie.released, movie.duration, genres_str,
-                     movie.director, movie.language, movie.actors, movie.add_to_db_date))
-def main():
-    movies = getPopularMovies()
-    
+                     movie.director, movie.language, movie.actors, movie.add_to_db_date, movie.seen))
+
+
+def get_column_names(table_name):
     conn = sqlite3.connect('movies.db')
     cursor = conn.cursor()
-
-    create_movies_table(cursor)
-    print(len(movies))
-    for movie in movies:
-        insert_movie(cursor, movie)
-
-    conn.commit()
+    
+    cursor.execute(f"PRAGMA table_info({table_name})")
+    
+    columns = cursor.fetchall()
+    
+    column_names = [column[1] for column in columns]
+    
     conn.close()
     
+    return column_names
+
+def update_seen(cursor, movie_name):
+    cursor.execute(f"""
+            SELECT seen FROM movies
+            WHERE name = '{movie_name}'
+        """)
+    result = cursor.fetchone()
+    if result and result[0] is not None:
+        user_input = input(f"You already seen this movie in {result[0]}. Do you want to update it anyway? [y/n]: ")
+        if user_input.lower() != 'y':
+            print("Update aborted.")
+            return
+    seen_date = datetime.now().date()
+    cursor.execute(f"""
+        UPDATE movies
+        SET seen = '{seen_date}'
+        WHERE name = '{movie_name}'
+    """)
+    
+    cursor.execute(f"""
+                   SELECT * FROM movies 
+                   WHERE name = '{movie_name}'
+        """)
+    
+    movie_info = cursor.fetchall()
+    
+    movie = Movie(name=movie_info[1],
+                  link=movie_info[2],
+                  rating_IMDB=movie_info[3],
+                  rating_MPPA=movie_info[4],
+                  year=movie_info[5],
+                  duration=movie_info[6],
+                  genres=movie_info[7],
+                  director=movie_info[8],
+                  language=movie_info[9],
+                  actors=movie_info[10]
+                  )
+    
+    movie.printMovie()
+
+def main():
+    create_flag = "--new" in sys.argv
+    update_seen_flag = "--update-seen" in sys.argv
+    list_movies_flag = "--list-movies" in sys.argv
+    if create_flag:
+        user_flag = input("Are you sure you want to continue?[Y/n] ")
+        if user_flag.lower() == 'y':
+            movies = getPopularMovies()
+        
+            conn = sqlite3.connect("movies.db")
+            cursor = conn.cursor()
+
+            create_movies_table(cursor)
+
+            for movie in movies:
+                insert_movie(cursor, movie)
+
+            conn.commit()
+            conn.close()
+        else:
+            print("Database creation aborted.")
+    
+    elif list_movies_flag:
+        conn = sqlite3.connect("movies.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, rating_IMDB FROM movies")
+        movies = cursor.fetchall()
+        conn.close()
+        
+        movies_names = [movie[0] for movie in movies]
+        movies_rating_IMDB = [movie[1] for movie in movies]
+        
+        half_len = len(movies) // 2 + 1
+        movies_names_1 = movies_names[:half_len]
+        movies_names_2 = movies_names[half_len:]
+        
+        movies_rating_IMDB_1 = movies_rating_IMDB[:half_len]
+        movies_rating_IMDB_2 = movies_rating_IMDB[half_len:]
+        
+        table_1 = tabulate([(i+1, movie[0], movie[1]) for i, movie in enumerate(zip(movies_names_1, movies_rating_IMDB_1))], 
+                        headers=["Index", "Movie Name", "Rating IMDB"], 
+                        tablefmt="pretty",
+                        missingval="--No Rating--")
+        table_2 = tabulate([(i+1, movie[0], movie[1]) for i, movie in enumerate(zip(movies_names_2, movies_rating_IMDB_2))], 
+                        headers=["Index", "Movie Name", "Rating IMDB"], 
+                        tablefmt="pretty",
+                        missingval="--No Rating--")
+        
+        lines_1 = table_1.split('\n')
+        lines_2 = table_2.split('\n')
+        
+        max_len = max(len(lines_1), len(lines_2))
+        lines_1 += [''] * (max_len - len(lines_1))
+        lines_2 += [''] * (max_len - len(lines_2))
+
+        result = '\n'.join([f'{line1}\t{line2}' for line1, line2 in zip(lines_1, lines_2)])
+        print(result)
+        
+
+     # movies_names = [movie[0] for movie in movies]
+        # movies_rating_IMDB = [movie[1] for movie in movies]
+    elif update_seen_flag:
+        index_movie_seen = sys.argv.index("--update-seen") + 1
+        conn = sqlite3.connect("movies.db")
+        cursor = conn.cursor()
+        update_seen(cursor=cursor, movie_name=sys.argv[index_movie_seen])
+        conn.close()
+        
+        
+    else:
+        print("No")
+        # column_names = get_column_names("movies")
+        
+        # conn = sqlite3.connect("movies.db")
+        # cursor = conn.cursor()
+        # cursor.execute("SELECT * FROM movies")
+        
+        # rows = cursor.fetchall()
+        
+        # conn.close()
+        
+        # df = pd.DataFrame(rows, columns=column_names)
+        # df.set_index("id", inplace=True)
+
+        # print(df.head())
+        
+        
+
+        
 if __name__ == "__main__":
     main() 
+
+
+##### DEBUG FUNCTIONS
+def list_tables(database_file):
+    conn = sqlite3.connect(database_file)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+    
+    tables = cursor.fetchall()
+    
+    conn.close()
+    
+    table_names = [table[0] for table in tables]
+    
+    return table_names
+
+def debug():
+    database_file = 'movies.db'
+
+    tables = list_tables(database_file)
+
+    print("Tables in the database:")
+    for table in tables:
+        print(table)
