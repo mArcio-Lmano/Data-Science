@@ -223,7 +223,6 @@ def extractMovie(movies):
     
     df = pd.DataFrame(data, columns=["Name", "Genres", "seen"])
     df_exploded = df.explode("Genres")
-    print(df_exploded.head())
     unique_genres = df_exploded["Genres"].unique()
 
     table = tabulate([[unique_genre] for unique_genre in unique_genres], 
@@ -234,7 +233,6 @@ def extractMovie(movies):
     genre_input = ""
     while genre_input.lower() not in map(str.lower, unique_genres) and genre_input.lower() != "none":
         genre_input = input("Choose a genre: ")
-        print(genre_input)
         
     print(df_exploded.head())
     
