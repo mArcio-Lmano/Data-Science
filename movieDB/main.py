@@ -4,6 +4,9 @@ import argparse
 import json
 import os
 
+import pandas as pd
+import numpy as np
+
 from bs4 import BeautifulSoup
 from datetime import datetime
 from tabulate import tabulate
@@ -199,22 +202,51 @@ def updateSeenEntry(cursor, movie_name):
     movie_info = cursor.fetchone()
     if movie_info:
         movie = Movie(name=movie_info[1],
-                      link=movie_info[2],
-                      rating_IMDB=movie_info[3],
-                      rating_MPPA=movie_info[4],
-                      year=movie_info[5],
-                      duration=movie_info[6],
-                      genres=movie_info[7],
-                      director=movie_info[8],
-                      language=movie_info[9],
-                      actors=movie_info[10], 
-                      seen=seen_date
-                      )
+            link=movie_info[2],
+            rating_IMDB=movie_info[3],
+            rating_MPPA=movie_info[4],
+            year=movie_info[5],
+            duration=movie_info[7],
+            genres=movie_info[8],
+            director=movie_info[9],
+            language=movie_info[10],
+            actors=movie_info[11], 
+            seen=seen_date
+            )
     
         movie.printMovie()
   
-        
 
+def extractMovie(movies):
+    genres = [ [genre.strip() for genre in movie[1].split(",")] for movie in movies]
+    data = [[movie[0], genre, movie[2]] for movie, genre in zip(movies, genres)]
+    
+    df = pd.DataFrame(data, columns=["Name", "Genres", "seen"])
+    df_exploded = df.explode("Genres")
+    print(df_exploded.head())
+    unique_genres = df_exploded["Genres"].unique()
+
+    table = tabulate([[unique_genre] for unique_genre in unique_genres], 
+                     headers=["Genres"],
+                     tablefmt="pretty")
+    print(table)
+    
+    genre_input = ""
+    while genre_input.lower() not in map(str.lower, unique_genres) and genre_input.lower() != "none":
+        genre_input = input("Choose a genre: ")
+        print(genre_input)
+        
+    print(df_exploded.head())
+    
+    if genre_input.lower() == "none":
+        random_movie_name = np.random.choice(df["Name"])
+        return random_movie_name
+    else:
+        df_genre = df_exploded.groupby("Genres").get_group(genre_input)["Name"]
+        random_movie_name = np.random.choice(df_genre)
+        return random_movie_name       
+        
+        
 def createNewDb():
     database_found = os.path.exists("movies.db")
     if database_found:
@@ -248,6 +280,11 @@ def listMovies(list_type):
         
     conn.close()
     
+    print(f"MOVIES: {list_type}")
+    prettyListMovies(movies=movies, headers=["Index", "Movie Name", "Rating IMDB"])
+    
+ 
+def prettyListMovies(movies, headers):
     half_len = (len(movies) + 1) // 2 
     movies_1 = movies[:half_len]
     movies_2 = movies[half_len:]
@@ -258,28 +295,25 @@ def listMovies(list_type):
         movies_2 = []
     
     table_1 = tabulate([(i+1, movie[0], movie[1]) for i, movie in enumerate(movies_1)], 
-                    headers=["Index", "Movie Name", "Rating IMDB"], 
+                    headers=headers, 
                     tablefmt="pretty",
-                    missingval="-- No Rating --")
+                    missingval="-- No Value --")
     
     table_2 = tabulate([(i+1, movie[0], movie[1]) for i, movie in enumerate(movies_2, start=half_len)], 
-                    headers=["Index", "Movie Name", "Rating IMDB"], 
+                    headers=headers, 
                     tablefmt="pretty",
-                    missingval="-- No Rating --") if len(movies) != 1 else ""
+                    missingval="-- No Value --") if len(movies) != 1 else ""
 
     lines_1 = table_1.split('\n')
     lines_2 = table_2.split('\n')
 
     max_len = max(len(lines_1), len(lines_2))
 
-    # Extend the shorter table to match the length of the longer one
     lines_1.extend([''] * (max_len - len(lines_1)))
     lines_2.extend([''] * (max_len - len(lines_2)))
 
-    # Combine the lines from both tables
     result = '\n'.join([f'{line1}\t{line2}' for line1, line2 in zip(lines_1, lines_2)])
 
-    print(f"MOVIES: {list_type}")
     print(result)
         
 def updateSeen(movie_name):
@@ -289,14 +323,70 @@ def updateSeen(movie_name):
     updateSeenEntry(cursor=cursor, movie_name=movie_name)
     conn.commit()
     conn.close()        
+  
+def chooseMovie(seen_arg):
+    
+    query = """SELECT name, genres, seen 
+               FROM movies 
+               WHERE genres NOT NULL 
+               AND rating_IMDB NOT NULL"""
+    if seen_arg == "seen":
+        query += " AND seen NOT NULL"
+    elif seen_arg == "not-seen":
+        query += " AND seen IS NULL"
+
+    with sqlite3.connect("movies.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute(query)
+        movies = cursor.fetchall()
+
+
+    
+    chosen_movie = extractMovie(movies)
+    
+    with sqlite3.connect("movies.db") as conn:
+        cursor = conn.cursor()
+        cursor.execute("""SELECT * 
+                          FROM movies
+                          WHERE name = ?""",(chosen_movie,))
+        movie_info = cursor.fetchall()[0]
+        
+    movie = Movie(name=movie_info[1],
+            link=movie_info[2],
+            rating_IMDB=movie_info[3],
+            rating_MPPA=movie_info[4],
+            year=movie_info[5],
+            duration=movie_info[7],
+            genres=movie_info[8],
+            director=movie_info[9],
+            language=movie_info[10],
+            actors=movie_info[11], 
+            seen=movie_info[13]
+            )
+    movie.printMovie()
+    
+    user_input = input("Will you see this movie? [Y/n] ")
+    
+    if user_input.lower() != "y":
+        chooseMovie(seen_arg=seen_arg)
+    else:
+        with sqlite3.connect("movies.db") as conn:
+            cursor = conn.cursor()
+            updateSeenEntry(cursor=cursor, movie_name=chosen_movie)
+            movies = cursor.fetchall()
+        return 
+        
+    
     
     
 
 def main():
-    parser = argparse.ArgumentParser(description="IMDb Movie Management System")
+    parser = argparse.ArgumentParser(description="IMDB Movies Management System")
     parser.add_argument("--new", action="store_true", help="Create a new database")
     parser.add_argument("--list-movies", choices=["all", "seen", "not-seen"], help="List movies by type")
     parser.add_argument("--update-seen", metavar="MOVIE_NAME", help="Update seen status of a movie")
+    # parser.add_argument("--choose-movie", nargs="?", metavar=("seen"), help="Choose a movie based on the seen status")
+    parser.add_argument("--choose-movie", choices=["seen", "not-seen", "all"], help="")
     
     args = parser.parse_args()
 
@@ -306,8 +396,13 @@ def main():
         listMovies(args.list_movies)
     elif args.update_seen:
         updateSeen(args.update_seen)
+    elif args.choose_movie:
+        chooseMovie(args.choose_movie)
     else:
         parser.print_help()
+        
+
+
 
 if __name__ == "__main__":
     main() 
