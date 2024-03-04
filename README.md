@@ -1,6 +1,6 @@
 # Data Science Projects Repository
 
-Welcome to the Data Science Projects Repository! This repository contains a diverse collection of projects covering various subjects within the field of data science. From data analysis to machine learning, each project offers insights into different aspects of working with data. Below is a brief overview of the projects included in this repository:
+Welcome to the Data Science Projects Repository! This repository contains a diverse collection of projects covering various subjects within the field of data science. From data analysis to machine learning, each project offers insights into different aspects of working with data. Below is a brief overview of some projects included in this repository:
 
 ## Project 1: IMDb Movies Management System
 
