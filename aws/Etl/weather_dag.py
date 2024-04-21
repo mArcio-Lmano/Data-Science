@@ -95,7 +95,7 @@ with DAG(
     city_name = "Porto"
     # with open("api.key", "r") as file:
     #     api_key = file.read()
-    api_key = "a3d23475d1415dd9e8b765d7efe21473"
+    api_key = "Nothing"
 
     url = f"/data/2.5/weather?q={city_name}&appid={api_key}"
 
